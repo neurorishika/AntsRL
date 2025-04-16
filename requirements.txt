@@ -1,0 +1,9 @@
+numpy
+scipy
+gymnasium # Successor to gym
+stable-baselines3[extra] # Includes PPO, SAC, Tensorboard support
+pyyaml
+matplotlib
+pytest # For testing
+# For distributed training later, consider adding:
+# ray[rllib]

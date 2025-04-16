@@ -1,0 +1,41 @@
+# This is a .gitignore file for a Python project
+# It specifies files and directories that should not be tracked by Git
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+*/venv/
+*/env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Log files and data
+logs/
+*.log
+*.csv
+*.pkl
+*.zip # Be careful if you want to commit specific model checkpoints
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage*
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints

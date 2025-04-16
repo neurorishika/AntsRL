@@ -1,0 +1,47 @@
+# Environment Parameters
+env_params:
+  grid_size: 20         # N: Size of the NxN grid
+  home_zone_length: 5   # L: Length of the home zone line
+  goal_zone_radius: 2   # R: Radius of the goal zone circle
+  max_episode_steps: 100 # T: Max steps per agent
+  max_heading_history: 10 # Max length of heading history in observation
+  odor_decay: 0.95      # Factor by which odor decays each step (optional, adding dynamics)
+  odor_diffusion: 0.1   # Factor for odor spreading slightly (optional, adding dynamics)
+  rewards:
+    r1_enter_goal: 10.0   # Reward for Agent 1 entering goal
+    r2_return_home: 20.0  # Reward for Agent 1 returning home after goal
+    R_shared_goal: 50.0 # Shared reward if Agent 2 reaches goal
+    step_penalty: -0.01   # Small penalty per step to encourage efficiency
+    # --- Reward Shaping (Optional) ---
+    # distance_reward_scale: 0.05 # Reward based on reducing distance to goal
+    # odor_proximity_reward: 0.1 # Reward for being near high odor (for Agent 2)
+
+# RL Algorithm Parameters (Example using PPO)
+model_params:
+  algorithm: PPO
+  policy: MultiInputPolicy # Required for Dict observation space
+  learning_rate: 0.0003
+  n_steps: 2048           # Steps collected per environment before update
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99             # Discount factor
+  gae_lambda: 0.95        # Factor for Generalized Advantage Estimation
+  clip_range: 0.2         # PPO clipping parameter
+  ent_coef: 0.0           # Entropy coefficient
+  vf_coef: 0.5            # Value function coefficient
+  max_grad_norm: 0.5      # Max gradient norm for clipping
+  policy_kwargs:
+    # Example: Customize network architecture if needed
+    # net_arch: [dict(pi=[64, 64], vf=[64, 64])]
+    # activation_fn: nn.ReLU
+
+# Training Parameters
+training_params:
+  total_timesteps: 1_000_000 # Total steps for training
+  log_interval: 1           # Log stats every 'log_interval' rollouts
+  save_freq: 50000          # Save model checkpoint every 'save_freq' steps
+  n_envs: 4                 # Number of parallel environments (for local scaling)
+  seed: 42                  # Random seed for reproducibility
+  log_dir: "./logs/"        # Directory for TensorBoard logs and models
+  eval_freq: 25000          # Evaluate model every 'eval_freq' steps
+  n_eval_episodes: 10       # Number of episodes for evaluation
