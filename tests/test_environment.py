@@ -37,7 +37,7 @@ def test_env_initialization(env):
     assert env.N == 10 # From fixture override
     assert env.T == 50 # From fixture override
     assert isinstance(env.observation_space, gym.spaces.Dict)
-    assert isinstance(env.action_space, gym.spaces.Dict)
+    assert isinstance(env.action_space, gym.spaces.Box)
     assert env.grid_odor.shape == (env.N, env.N)
     assert env.current_agent_idx == 0 # Should be 0 before first reset
 
@@ -92,7 +92,8 @@ def test_action_move_forward(env):
     initial_pos = env.agent_pos.copy()
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Force Move Forward
+    # action['direction'] = 2 # Force Move Forward
+    action[0] = 0.0    # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -109,13 +110,15 @@ def test_action_turn(env):
 
     # Turn Left
     action = env.action_space.sample()
-    action['direction'] = 0 # Turn Left
+    # action['direction'] = 0 # Turn Left
+    action[0] = -0.5 # a_dir in [-infty, -0.33] => direction=0 (Left)
     obs, reward, term, trunc, info = env.step(action)
     assert info['agent_heading'] == 0 # East -> North
     assert np.array_equal(info['agent_pos'], initial_pos) # Position unchanged
 
     # Turn Right from North
-    action['direction'] = 1 # Turn Right
+    # action['direction'] = 1 # Turn Right
+    action[0] = 0.5 # a_dir in [0.33, inf] => direction=1 (Right)
     obs, reward, term, trunc, info = env.step(action)
     assert info['agent_heading'] == 1 # North -> East
     assert np.array_equal(info['agent_pos'], initial_pos)
@@ -129,7 +132,8 @@ def test_action_wall_collision(env):
     initial_pos = env.agent_pos.copy()
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Move Forward (into wall)
+    # action['direction'] = 2 # Move Forward (into wall)
+    action[0] = 0.0 # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -147,9 +151,12 @@ def test_odor_release(env):
     assert np.all(env.grid_odor == 0.0)
 
     action = env.action_space.sample()
-    action['release_odor'] = 1
-    action['odor_strength'] = np.array([5.0], dtype=np.float32)
-    action['odor_spread'] = np.array([1.0], dtype=np.float32)
+    # action['release_odor'] = 1
+    action[1] = 1.0 # a_release_odor in [0, inf] => release odor
+    # action['odor_strength'] = np.array([5.0], dtype=np.float32)
+    action[2] = 1.0   # odor_spread => maps to max (5.0)
+    # action['odor_spread'] = np.array([1.0], dtype=np.float32)
+    action[3] = 1.0   # odor_strength => maps to max (10.0)
 
     env.step(action)
 
@@ -167,7 +174,8 @@ def test_odor_no_release(env):
     initial_odor_sum = np.sum(env.grid_odor) # Should be 0
 
     action = env.action_space.sample()
-    action['release_odor'] = 0 # DO NOT release
+    # action['release_odor'] = 0 # DO NOT release
+    action[1] = -1.0 # a_release_odor in [-inf, 0] => no release
 
     env.step(action)
 
@@ -186,16 +194,20 @@ def test_odor_dynamics(env):
 
     # Release some odor first
     action = env.action_space.sample()
-    action['release_odor'] = 1
-    action['odor_strength'] = np.array([10.0], dtype=np.float32)
-    action['odor_spread'] = np.array([0.5], dtype=np.float32) # Small spread
+    # action['release_odor'] = 1
+    action[1] = 1.0 # a_release_odor in [0, inf] => release odor
+    # action['odor_strength'] = np.array([10.0], dtype=np.float32)
+    action[2] = 1.0   # odor_spread => maps to max (5.0)
+    # action['odor_spread'] = np.array([0.5], dtype=np.float32) # Small spread
+    action[3] = -1.0  # odor_strength => maps to min (0.5)
     env.step(action)
     initial_odor_state = env.grid_odor.copy()
     initial_max_odor = np.max(initial_odor_state)
     assert initial_max_odor > 0
 
     # Take a step without releasing odor to observe dynamics
-    action['release_odor'] = 0
+    # action['release_odor'] = 0
+    action[1] = -1.0 # a_release_odor in [-inf, 0] => no release
     env.step(action)
     final_odor_state = env.grid_odor.copy()
     final_max_odor = np.max(final_odor_state)
@@ -222,7 +234,8 @@ def test_agent1_reach_goal_reward(env):
     assert not env.agent1_reached_goal_flag
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Move Forward (towards goal)
+    # action['direction'] = 2 # Move Forward (towards goal)
+    action[0] = 0.0 # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -262,7 +275,8 @@ def test_agent1_return_home_reward(env):
     assert env.agent1_returned_home_flag is False
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Move forward (towards home)
+    # action['direction'] = 2 # Move forward (towards home)
+    action[0] = 0.0 # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -309,19 +323,32 @@ def test_agent_switch_on_timeout(env):
 
 def test_agent_switch_on_return_home(env):
     """Test switch to Agent 2 when Agent 1 successfully returns home."""
-    env.reset(seed=133)
-    # Simulate Agent 1 reaching goal and being near home
+    env.reset(seed=130)
+    # Simulate having reached goal
     env.agent1_reached_goal_flag = True
-    home_cell = env.home_zone_coords[0]
+    # Place agent just outside home zone, heading towards it
+    home_cell = env.home_zone_coords[0] # Example home cell
+    # Place adjacent to home_cell (assuming home is on edge)
     if home_cell[0] == 0: # Top edge
-        start_pos = np.array([1, home_cell[1]]); head = 0
-    else: # Assume bottom edge for simplicity
-        start_pos = np.array([env.N - 2, home_cell[1]]); head = 2
+        start_pos = np.array([1, home_cell[1]])
+        env.agent_heading = 0 # North
+    elif home_cell[0] == env.N - 1: # Bottom edge
+        start_pos = np.array([env.N - 2, home_cell[1]])
+        env.agent_heading = 2 # South
+    elif home_cell[1] == 0: # Left edge
+        start_pos = np.array([home_cell[0], 1])
+        env.agent_heading = 3 # West
+    else: # Right edge
+        start_pos = np.array([home_cell[0], env.N - 2])
+        env.agent_heading = 1 # East
     env.agent_pos = start_pos
-    env.agent_heading = head
+
+    assert env._is_in_zone(env.agent_pos, env.home_zone_coords) is False
+    assert env.agent1_returned_home_flag is False
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Move into home zone
+    # action['direction'] = 2 # Move forward (towards home)
+    action[0] = 0.0 # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -347,7 +374,8 @@ def test_agent2_reach_goal_termination(env):
     env.agent_heading = 0 if start_r > goal_center[0] else 2 # Face goal
 
     action = env.action_space.sample()
-    action['direction'] = 2 # Move into goal
+    # action['direction'] = 2 # Move into goal
+    action[0] = 0.0 # a_dir in [-0.33, 0.33] => direction=2 (Forward)
 
     obs, reward, terminated, truncated, info = env.step(action)
 
@@ -372,7 +400,8 @@ def test_agent2_timeout_truncation(env):
     info = {}
     for i in range(env.T):
         action = env.action_space.sample()
-        action['direction'] = 0 # Just turn to avoid reaching goal accidentally
+        # action['direction'] = 0 # Just turn to avoid reaching goal accidentally
+        action[0] = -0.5 if i % 2 == 0 else 0.5 # Alternate turns to avoid goal
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated: break # Stop if goal reached unexpectedly
         if i < env.T - 1:
@@ -396,7 +425,8 @@ def test_heading_history(env):
     # Take steps and record headings
     for i in range(hist_len + 2): # Go over max length
         action = env.action_space.sample()
-        action['direction'] = i % 3 # Cycle through turn L, R, Fwd
+        # action['direction'] = i % 3 # Cycle through turn L, R, Fwd
+        action[0] = -0.5 if i % 3 == 0 else (0.5 if i % 3 == 1 else 0.0) # Turn L, R, Fwd
         obs, _, _, _, info = env.step(action)
         headings.append(info['agent_heading'])
         expected_hist = headings[-(min(i+2, hist_len)):] # Get last max_hist items

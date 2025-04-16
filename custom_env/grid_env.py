@@ -4,6 +4,7 @@ import numpy as np
 import random
 from scipy.stats import multivariate_normal
 from collections import deque
+from utils.helpers import set_seeds
 
 class GridEnv(gym.Env):
     """
@@ -27,6 +28,8 @@ class GridEnv(gym.Env):
     def __init__(self, config):
         super().__init__()
 
+        self.reward_range = (-float('inf'), float('inf'))
+        
         self.N = config['grid_size']
         self.L = config['home_zone_length']
         self.R_sq = config['goal_zone_radius']**2 # Store squared radius for efficiency
@@ -64,12 +67,25 @@ class GridEnv(gym.Env):
         self.total_steps = 0       # Total steps in the episode
 
         # Define action space
-        self.action_space = spaces.Dict({
-            "direction": spaces.Discrete(3), # 0: Left, 1: Right, 2: Forward
-            "release_odor": spaces.Discrete(2),
-            "odor_spread": spaces.Box(low=0.1, high=5.0, shape=(1,), dtype=np.float32),
-            "odor_strength": spaces.Box(low=0.1, high=10.0, shape=(1,), dtype=np.float32)
-        })
+        # self.action_space = spaces.Dict({
+        #     "direction": spaces.Discrete(3), # 0: Left, 1: Right, 2: Forward
+        #     "release_odor": spaces.Discrete(2),
+        #     "odor_spread": spaces.Box(low=0.1, high=5.0, shape=(1,), dtype=np.float32),
+        #     "odor_strength": spaces.Box(low=0.1, high=10.0, shape=(1,), dtype=np.float32)
+        # })
+
+
+        # Define a single 4D continuous action space in [-1,1]
+        # action[0] => direction proxy in [-1,1]
+        # action[1] => release_odor proxy in [-1,1]
+        # action[2] => odor_spread proxy in [-1,1]
+        # action[3] => odor_strength proxy in [-1,1]
+        self.action_space = spaces.Box(
+            low=-1.0, 
+            high=1.0, 
+            shape=(4,), 
+            dtype=np.float32
+        )
 
         # Define observation space
         self.observation_space = spaces.Dict({
@@ -78,8 +94,6 @@ class GridEnv(gym.Env):
             "heading_history": spaces.Box(low=-1, high=3, shape=(self.max_heading_history,), dtype=np.int8),
             "at_wall": spaces.Discrete(2),
             "diagonal_odors": spaces.Box(low=0.0, high=np.inf, shape=(2,), dtype=np.float32)
-            # Consider adding relative goal position if helpful for shaping
-            # "relative_goal": spaces.Box(low=-self.N, high=self.N, shape=(2,), dtype=np.float32)
         })
 
         # For rendering
@@ -230,12 +244,6 @@ class GridEnv(gym.Env):
             "at_wall": int(at_wall),
             "diagonal_odors": diag_odors
         }
-        # Optionally add relative goal position
-        # if self.goal_zone_center is not None:
-        #     relative_goal = self.goal_zone_center - self.agent_pos
-        #     obs["relative_goal"] = relative_goal.astype(np.float32)
-        # else: # Should not happen after reset, but safety first
-        #     obs["relative_goal"] = np.zeros(2, dtype=np.float32)
 
         return obs
 
@@ -300,12 +308,7 @@ class GridEnv(gym.Env):
     def reset(self, seed=None, options=None):
         """ Resets the environment to an initial state for a new episode."""
         super().reset(seed=seed)
-
-        if seed is not None:
-            self._np_random = np.random.default_rng(seed)
-        else:
-            self._np_random = np.random.default_rng()
-        # Existing reset code starts here
+        set_seeds(seed)
         self.current_step = 0
 
         # Reset environment state
@@ -346,10 +349,31 @@ class GridEnv(gym.Env):
         info = {}
 
         # --- 1. Parse Action ---
-        direction_action = action["direction"]
-        release_odor = action["release_odor"] == 1
-        odor_spread = action["odor_spread"][0]
-        odor_strength = action["odor_strength"][0]
+        # direction_action = action["direction"]
+        # release_odor = action["release_odor"] == 1
+        # odor_spread = action["odor_spread"][0]
+        # odor_strength = action["odor_strength"][0]
+        # 1a. Discrete direction: map a_dir ∈ [-1,1] to {0,1,2}
+        a_dir, a_release, a_spread, a_strength = action
+
+        if a_dir < -0.33:
+            direction_action = 0  # Turn Left
+        elif a_dir > 0.33:
+            direction_action = 1  # Turn Right
+        else:
+            direction_action = 2  # Move Forward
+
+        # 1b. release_odor: map a_release ∈ [-1,1] to {0,1}
+        release_odor = 1 if a_release > 0 else 0
+
+        # 1c. odor_spread: map [-1,1] to [0.1,5.0]
+        # general formula: x_mapped = low + (high - low) * (a_value + 1)/2
+        odor_spread_min, odor_spread_max = 0.1, 5.0
+        odor_spread = odor_spread_min + (odor_spread_max - odor_spread_min)*((a_spread + 1)/2)
+
+        # 1d. odor_strength: map [-1,1] to [0.1,10.0]
+        odor_strength_min, odor_strength_max = 0.1, 10.0
+        odor_strength = odor_strength_min + (odor_strength_max - odor_strength_min)*((a_strength + 1)/2)
 
         # --- 2. Execute Direction Control ---
         prev_pos = self.agent_pos.copy() # Store previous position for checks
